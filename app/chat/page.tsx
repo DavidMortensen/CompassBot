@@ -116,10 +116,16 @@ export default function ChatPage() {
     
     // Set a maximum number of polling attempts
     let pollCount = 0;
-    const maxPolls = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+    const maxPolls = 120; // Poll for up to 5 minutes (120 * 2.5 seconds)
+    let timeoutId: NodeJS.Timeout | null = null;
     
     // Create a recursive polling function
-    const poll = () => {
+    const poll = async () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      
       pollCount++;
       
       if (pollCount > maxPolls) {
@@ -136,20 +142,24 @@ export default function ChatPage() {
         return;
       }
       
-      // Call the status API
-      fetch('/api/chat/status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ threadId, runId }),
-      })
-      .then(response => response.json())
-      .then(data => {
+      try {
+        // Call the status API
+        const response = await fetch('/api/chat/status', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ threadId, runId }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Status API returned ${response.status}`);
+        }
+        
+        const data = await response.json();
         console.log('Poll response:', data);
         
         if (data.completed && data.error) {
-          // Handle error
           throw new Error(data.error);
         }
         
@@ -160,28 +170,42 @@ export default function ChatPage() {
         } else if (data.completed) {
           throw new Error('No message in completed response');
         } else {
-          // Still processing, schedule next poll
-          console.log(`Still processing: ${data.status}`);
-          setTimeout(poll, 5000);
+          // Still processing, schedule next poll with exponential backoff
+          const delay = Math.min(2500 + (pollCount * 500), 5000); // Start at 2.5s, max 5s
+          console.log(`Still processing: ${data.status}, next poll in ${delay}ms`);
+          timeoutId = setTimeout(poll, delay);
         }
-      })
-      .catch(err => {
+      } catch (err) {
         console.error('Polling error:', err);
         
-        // Add an error message to the chat
+        // For network errors, retry after a short delay
+        if (err instanceof Error && err.message.includes('fetch')) {
+          console.log('Network error, retrying in 5s...');
+          timeoutId = setTimeout(poll, 5000);
+          return;
+        }
+        
+        // For other errors, stop polling and show error message
         setMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `I'm sorry, I encountered an error while processing your request: ${err.message || 'Unknown error'}. Please try again.`
+          content: `I'm sorry, I encountered an error while processing your request: ${err instanceof Error ? err.message : 'Unknown error'}. Please try again.`
         }]);
         
         setError(err instanceof Error ? err : new Error('An unknown error occurred'));
         setIsLoading(false);
-      });
+      }
     };
     
     // Start polling
     poll();
+    
+    // Cleanup function to clear any pending timeouts
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

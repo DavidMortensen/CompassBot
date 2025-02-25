@@ -25,18 +25,16 @@ export async function POST(req: Request) {
     const thread = await openai.beta.threads.create();
     console.log("Thread created:", thread.id);
 
-    // Add the conversation messages to the thread
-    console.log("Adding messages to thread...");
-    
-    for (const message of chatMessages) {
-      if (message.role === 'user') {
-        await openai.beta.threads.messages.create(thread.id, {
-          role: 'user',
-          content: message.content,
-        });
-      }
+    // Add only the last user message to the thread to minimize API calls
+    const lastUserMessage = chatMessages.filter((m: any) => m.role === 'user').pop();
+    if (lastUserMessage) {
+      console.log("Adding last user message to thread...");
+      await openai.beta.threads.messages.create(thread.id, {
+        role: 'user',
+        content: lastUserMessage.content,
+      });
+      console.log("Message added to thread");
     }
-    console.log("Messages added to thread");
 
     // Run the assistant on the thread
     console.log("Running assistant...");
@@ -45,8 +43,7 @@ export async function POST(req: Request) {
     });
     console.log("Run created:", run.id);
 
-    // Instead of polling here (which causes timeouts), return the thread and run IDs
-    // so the client can poll for completion
+    // Return immediately with the IDs needed for polling
     return NextResponse.json({
       threadId: thread.id,
       runId: run.id,
