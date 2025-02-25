@@ -62,3 +62,25 @@ This application has been updated to use a specific OpenAI Assistant instead of 
    ```
 
 The chat interface will now interact with your specific assistant rather than the general chat model.
+
+## Landing Page & Authentication
+
+The application now includes a landing page with invite code authentication:
+
+1. Users must enter a valid invite code to access the chatbot
+2. The invite code is verified against the `INVITE_CODE` environment variable
+3. After successful validation, a secure HTTP-only cookie is set to remember the authentication
+4. The middleware protects the `/chat` route, redirecting unauthenticated users to the landing page
+
+### Setup Instructions
+
+1. Add your company logo as `main-logo.png` in the `public` directory for the landing page
+2. Copy `.env.local.example` to `.env.local` and set your `INVITE_CODE`
+3. For production, set a strong, unique invite code that can't be easily guessed
+
+### Customization
+
+You can customize the landing page in `app/page.tsx`:
+- Change the welcome text and description
+- Adjust the styling and animations
+- Modify the authentication flow as needed
