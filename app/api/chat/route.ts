@@ -1,6 +1,12 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 
+// Define message type
+type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
 // Create an OpenAI API client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "",
@@ -26,7 +32,7 @@ export async function POST(req: Request) {
     console.log("Thread created:", thread.id);
 
     // Add only the last user message to the thread to minimize API calls
-    const lastUserMessage = chatMessages.filter((m: any) => m.role === 'user').pop();
+    const lastUserMessage = (chatMessages as ChatMessage[]).filter((m) => m.role === 'user').pop();
     if (lastUserMessage) {
       console.log("Adding last user message to thread...");
       await openai.beta.threads.messages.create(thread.id, {

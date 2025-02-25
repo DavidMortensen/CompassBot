@@ -1,14 +1,14 @@
 'use client'
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, KeyboardEvent } from 'react'
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { motion, AnimatePresence } from "framer-motion"
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Image from 'next/image'
+import type { ReactNode } from 'react'
 
 // Define message types
 type Message = {
@@ -17,8 +17,69 @@ type Message = {
   content: string;
 };
 
+// Define types for markdown components
+type MarkdownProps = {
+  children?: ReactNode;
+  className?: string;
+  href?: string;
+};
+
 // Logo configuration
-const COMPASS_LOGO = '/compass-logo.png'; // Using the correct filename from the public directory
+const COMPASS_LOGO = '/compass-logo.png';
+
+// Define the markdown components with proper types
+const MarkdownComponents: Components = {
+  a: ({ children, href, ...props }: MarkdownProps) => (
+    <a 
+      {...props} 
+      href={href}
+      target="_blank" 
+      rel="noopener noreferrer" 
+      className="text-blue-600 hover:underline"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children, className }: MarkdownProps) => {
+    const match = /language-(\w+)/.exec(className || '');
+    return match ? (
+      <div className="my-4 rounded-md overflow-hidden">
+        <div className="bg-gray-800 text-gray-200 text-xs py-1 px-4 font-mono">
+          {match[1]}
+        </div>
+        <pre className="bg-gray-900 p-4 overflow-x-auto">
+          <code className={className}>
+            {children}
+          </code>
+        </pre>
+      </div>
+    ) : (
+      <code className="bg-gray-200 rounded px-1 py-0.5 text-sm font-mono">
+        {children}
+      </code>
+    );
+  },
+  p: ({ children }: MarkdownProps) => <p className="mb-4 last:mb-0">{children}</p>,
+  h1: ({ children }: MarkdownProps) => <h1 className="text-xl font-bold mb-4 mt-6">{children}</h1>,
+  h2: ({ children }: MarkdownProps) => <h2 className="text-lg font-bold mb-3 mt-5">{children}</h2>,
+  h3: ({ children }: MarkdownProps) => <h3 className="text-base font-bold mb-2 mt-4">{children}</h3>,
+  ul: ({ children }: MarkdownProps) => <ul className="list-disc pl-6 mb-4">{children}</ul>,
+  ol: ({ children }: MarkdownProps) => <ol className="list-decimal pl-6 mb-4">{children}</ol>,
+  li: ({ children }: MarkdownProps) => <li className="mb-1">{children}</li>,
+  blockquote: ({ children }: MarkdownProps) => (
+    <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4">{children}</blockquote>
+  ),
+  table: ({ children }: MarkdownProps) => (
+    <div className="overflow-x-auto my-4">
+      <table className="min-w-full divide-y divide-gray-300">{children}</table>
+    </div>
+  ),
+  thead: ({ children }: MarkdownProps) => <thead className="bg-gray-100">{children}</thead>,
+  tbody: ({ children }: MarkdownProps) => <tbody className="divide-y divide-gray-200">{children}</tbody>,
+  tr: ({ children }: MarkdownProps) => <tr>{children}</tr>,
+  th: ({ children }: MarkdownProps) => <th className="px-4 py-2 text-left font-medium text-gray-700">{children}</th>,
+  td: ({ children }: MarkdownProps) => <td className="px-4 py-2">{children}</td>,
+};
 
 export default function ChatPage() {
   // State for messages and input
@@ -226,64 +287,6 @@ export default function ChatPage() {
       opacity: [0.5, 1, 0.5],
       transition: { duration: 1.5, repeat: Infinity, ease: "easeInOut" }
     }
-  };
-
-  // Custom components for markdown rendering
-  const MarkdownComponents = {
-    // Style links
-    a: (props: any) => (
-      <a 
-        {...props} 
-        target="_blank" 
-        rel="noopener noreferrer" 
-        className="text-blue-600 hover:underline"
-      />
-    ),
-    // Style code blocks
-    code: ({inline, className, children, ...props}: any) => {
-      const match = /language-(\w+)/.exec(className || '');
-      return !inline && match ? (
-        <div className="my-4 rounded-md overflow-hidden">
-          <div className="bg-gray-800 text-gray-200 text-xs py-1 px-4 font-mono">
-            {match[1]}
-          </div>
-          <pre className="bg-gray-900 p-4 overflow-x-auto">
-            <code className={className} {...props}>
-              {children}
-            </code>
-          </pre>
-        </div>
-      ) : (
-        <code className="bg-gray-200 rounded px-1 py-0.5 text-sm font-mono" {...props}>
-          {children}
-        </code>
-      );
-    },
-    // Style paragraphs
-    p: (props: any) => <p className="mb-4 last:mb-0" {...props} />,
-    // Style headings
-    h1: (props: any) => <h1 className="text-xl font-bold mb-4 mt-6" {...props} />,
-    h2: (props: any) => <h2 className="text-lg font-bold mb-3 mt-5" {...props} />,
-    h3: (props: any) => <h3 className="text-base font-bold mb-2 mt-4" {...props} />,
-    // Style lists
-    ul: (props: any) => <ul className="list-disc pl-6 mb-4" {...props} />,
-    ol: (props: any) => <ol className="list-decimal pl-6 mb-4" {...props} />,
-    li: (props: any) => <li className="mb-1" {...props} />,
-    // Style blockquotes
-    blockquote: (props: any) => (
-      <blockquote className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />
-    ),
-    // Style tables
-    table: (props: any) => (
-      <div className="overflow-x-auto my-4">
-        <table className="min-w-full divide-y divide-gray-300" {...props} />
-      </div>
-    ),
-    thead: (props: any) => <thead className="bg-gray-100" {...props} />,
-    tbody: (props: any) => <tbody className="divide-y divide-gray-200" {...props} />,
-    tr: (props: any) => <tr {...props} />,
-    th: (props: any) => <th className="px-4 py-2 text-left font-medium text-gray-700" {...props} />,
-    td: (props: any) => <td className="px-4 py-2" {...props} />,
   };
 
   return (
