@@ -118,11 +118,11 @@ export default function ChatPage() {
     let pollCount = 0;
     const maxPolls = 60; // Poll for up to 5 minutes (60 * 5 seconds)
     
-    const pollInterval = setInterval(() => {
+    // Create a recursive polling function
+    const poll = () => {
       pollCount++;
       
       if (pollCount > maxPolls) {
-        clearInterval(pollInterval);
         console.error('Polling timed out after maximum attempts');
         
         // Add a timeout message to the chat
@@ -148,11 +148,6 @@ export default function ChatPage() {
       .then(data => {
         console.log('Poll response:', data);
         
-        // Clear interval immediately if completed to prevent any race conditions
-        if (data.completed) {
-          clearInterval(pollInterval);
-        }
-        
         if (data.completed && data.error) {
           // Handle error
           throw new Error(data.error);
@@ -165,12 +160,12 @@ export default function ChatPage() {
         } else if (data.completed) {
           throw new Error('No message in completed response');
         } else {
-          // Still processing, continue polling
+          // Still processing, schedule next poll
           console.log(`Still processing: ${data.status}`);
+          setTimeout(poll, 5000);
         }
       })
       .catch(err => {
-        clearInterval(pollInterval);
         console.error('Polling error:', err);
         
         // Add an error message to the chat
@@ -183,7 +178,10 @@ export default function ChatPage() {
         setError(err instanceof Error ? err : new Error('An unknown error occurred'));
         setIsLoading(false);
       });
-    }, 5000); // Poll every 5 seconds
+    };
+    
+    // Start polling
+    poll();
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
