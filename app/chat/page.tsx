@@ -63,7 +63,7 @@ export default function ChatPage() {
     setIsLoading(true);
     setError(null);
     
-    // Call API
+    // Call API to create thread and run
     fetch('/api/chat', {
       method: 'POST',
       headers: {
@@ -84,15 +84,15 @@ export default function ChatPage() {
       
       return response.json();
     })
-    .then(assistantMessage => {
-      console.log(`Message received:`, assistantMessage);
+    .then(data => {
+      console.log('Initial response:', data);
       
-      if (!assistantMessage || !assistantMessage.content) {
-        throw new Error('Invalid response format from API');
+      if (data.status === 'polling_required') {
+        // Start polling for the result
+        pollForCompletion(data.threadId, data.runId);
+      } else {
+        throw new Error('Unexpected response format');
       }
-      
-      // Add assistant message to the chat
-      setMessages(prev => [...prev, assistantMessage]);
     })
     .catch(err => {
       console.error('Chat error:', err);
@@ -106,10 +106,85 @@ export default function ChatPage() {
       
       setError(err instanceof Error ? err : new Error('An unknown error occurred'));
       console.error(`Error: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
-    })
-    .finally(() => {
       setIsLoading(false);
     });
+  };
+
+  // Function to poll for completion
+  const pollForCompletion = (threadId: string, runId: string) => {
+    console.log(`Polling for completion: thread ${threadId}, run ${runId}`);
+    
+    // Set a maximum number of polling attempts
+    let pollCount = 0;
+    const maxPolls = 60; // Poll for up to 5 minutes (60 * 5 seconds)
+    
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      
+      if (pollCount > maxPolls) {
+        clearInterval(pollInterval);
+        console.error('Polling timed out after maximum attempts');
+        
+        // Add a timeout message to the chat
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: "I'm sorry, but it's taking me longer than expected to respond. Please try again or ask a different question."
+        }]);
+        
+        setIsLoading(false);
+        return;
+      }
+      
+      // Call the status API
+      fetch('/api/chat/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ threadId, runId }),
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Poll response:', data);
+        
+        if (data.completed) {
+          // Polling complete
+          clearInterval(pollInterval);
+          
+          if (data.error) {
+            // Handle error
+            throw new Error(data.error);
+          }
+          
+          if (data.message) {
+            // Add the assistant's message to the chat
+            setMessages(prev => [...prev, data.message]);
+          } else {
+            throw new Error('No message in completed response');
+          }
+          
+          setIsLoading(false);
+        } else {
+          // Still processing, continue polling
+          console.log(`Still processing: ${data.status}`);
+        }
+      })
+      .catch(err => {
+        clearInterval(pollInterval);
+        console.error('Polling error:', err);
+        
+        // Add an error message to the chat
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `I'm sorry, I encountered an error while processing your request: ${err.message || 'Unknown error'}. Please try again.`
+        }]);
+        
+        setError(err instanceof Error ? err : new Error('An unknown error occurred'));
+        setIsLoading(false);
+      });
+    }, 5000); // Poll every 5 seconds
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {

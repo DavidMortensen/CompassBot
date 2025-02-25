@@ -45,74 +45,12 @@ export async function POST(req: Request) {
     });
     console.log("Run created:", run.id);
 
-    // Poll for run completion
-    console.log("Polling for run completion...");
-    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-    
-    // Set a maximum number of polling attempts to avoid infinite loops
-    let attempts = 0;
-    const maxAttempts = 30; // 30 seconds timeout
-    
-    while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && attempts < maxAttempts) {
-      console.log("Run status:", runStatus.status, "Attempt:", attempts + 1);
-      // Wait for a second before polling again
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-      attempts++;
-    }
-    
-    if (attempts >= maxAttempts) {
-      console.log("Run timed out after", maxAttempts, "seconds");
-      return NextResponse.json({ error: 'Request timed out' }, { status: 504 });
-    }
-    
-    console.log("Run completed with status:", runStatus.status);
-    
-    if (runStatus.status !== 'completed') {
-      console.log("Run failed with status:", runStatus.status);
-      return NextResponse.json({ error: `Run ended with status: ${runStatus.status}` }, { status: 500 });
-    }
-    
-    // Get the assistant's response
-    console.log("Getting messages from thread...");
-    const messages = await openai.beta.threads.messages.list(thread.id);
-    
-    // Find the first assistant message
-    const assistantMessage = messages.data.find((msg) => msg.role === 'assistant');
-    
-    if (!assistantMessage) {
-      console.log("No assistant message found");
-      return NextResponse.json({ error: 'No response from assistant' }, { status: 500 });
-    }
-    
-    console.log("Found assistant message");
-    
-    // Extract text from the message content
-    let content = "";
-    
-    try {
-      if (Array.isArray(assistantMessage.content)) {
-        for (const part of assistantMessage.content) {
-          if (part.type === 'text') {
-            content += part.text.value;
-          }
-        }
-      } else {
-        console.log("Unexpected message content format:", JSON.stringify(assistantMessage.content));
-        content = "I apologize, but I couldn't process your request properly.";
-      }
-    } catch (contentError) {
-      console.error("Error processing message content:", contentError);
-      content = "I apologize, but there was an error processing the response.";
-    }
-    
-    console.log("Sending response:", content.substring(0, 100) + "...");
-    
-    // Return the assistant's response using NextResponse
+    // Instead of polling here (which causes timeouts), return the thread and run IDs
+    // so the client can poll for completion
     return NextResponse.json({
-      role: "assistant",
-      content: content,
-      id: assistantMessage.id,
+      threadId: thread.id,
+      runId: run.id,
+      status: 'polling_required'
     });
     
   } catch (error: unknown) {
