@@ -85,13 +85,25 @@ export default function ChatPage() {
       return response.json();
     })
     .then(assistantMessage => {
-      console.log(`Message received: ${assistantMessage.content.substring(0, 50)}...`);
+      console.log(`Message received:`, assistantMessage);
+      
+      if (!assistantMessage || !assistantMessage.content) {
+        throw new Error('Invalid response format from API');
+      }
       
       // Add assistant message to the chat
       setMessages(prev => [...prev, assistantMessage]);
     })
     .catch(err => {
       console.error('Chat error:', err);
+      
+      // Add an error message to the chat
+      setMessages(prev => [...prev, {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `I'm sorry, I encountered an error: ${err.message || 'Unknown error'}. Please try again.`
+      }]);
+      
       setError(err instanceof Error ? err : new Error('An unknown error occurred'));
       console.error(`Error: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
     })

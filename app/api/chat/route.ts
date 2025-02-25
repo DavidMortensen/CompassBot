@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { NextResponse } from 'next/server';
 
 // Create an OpenAI API client
 const openai = new OpenAI({
@@ -9,7 +10,7 @@ const openai = new OpenAI({
 export const runtime = 'edge';
 
 // Use the specific assistant ID from the OpenAI playground
-const ASSISTANT_ID = "asst_lVJFmwqFwiSXnDM5BZbGYfEN";
+const ASSISTANT_ID = process.env.ASSISTANT_ID || "asst_lVJFmwqFwiSXnDM5BZbGYfEN";
 
 export async function POST(req: Request) {
   console.log("API called: /api/chat");
@@ -48,20 +49,28 @@ export async function POST(req: Request) {
     console.log("Polling for run completion...");
     let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
     
-    while (runStatus.status === 'queued' || runStatus.status === 'in_progress') {
-      console.log("Run status:", runStatus.status);
+    // Set a maximum number of polling attempts to avoid infinite loops
+    let attempts = 0;
+    const maxAttempts = 30; // 30 seconds timeout
+    
+    while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && attempts < maxAttempts) {
+      console.log("Run status:", runStatus.status, "Attempt:", attempts + 1);
       // Wait for a second before polling again
       await new Promise(resolve => setTimeout(resolve, 1000));
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      attempts++;
     }
+    
+    if (attempts >= maxAttempts) {
+      console.log("Run timed out after", maxAttempts, "seconds");
+      return NextResponse.json({ error: 'Request timed out' }, { status: 504 });
+    }
+    
     console.log("Run completed with status:", runStatus.status);
     
     if (runStatus.status !== 'completed') {
       console.log("Run failed with status:", runStatus.status);
-      return new Response(
-        JSON.stringify({ error: `Run ended with status: ${runStatus.status}` }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return NextResponse.json({ error: `Run ended with status: ${runStatus.status}` }, { status: 500 });
     }
     
     // Get the assistant's response
@@ -73,38 +82,44 @@ export async function POST(req: Request) {
     
     if (!assistantMessage) {
       console.log("No assistant message found");
-      return new Response(
-        JSON.stringify({ error: 'No response from assistant' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
-      );
+      return NextResponse.json({ error: 'No response from assistant' }, { status: 500 });
     }
     
     console.log("Found assistant message");
     
     // Extract text from the message content
     let content = "";
-    for (const part of assistantMessage.content) {
-      if (part.type === 'text') {
-        content += part.text.value;
+    
+    try {
+      if (Array.isArray(assistantMessage.content)) {
+        for (const part of assistantMessage.content) {
+          if (part.type === 'text') {
+            content += part.text.value;
+          }
+        }
+      } else {
+        console.log("Unexpected message content format:", JSON.stringify(assistantMessage.content));
+        content = "I apologize, but I couldn't process your request properly.";
       }
+    } catch (contentError) {
+      console.error("Error processing message content:", contentError);
+      content = "I apologize, but there was an error processing the response.";
     }
     
     console.log("Sending response:", content.substring(0, 100) + "...");
     
-    // Return the assistant's response in a simple format
-    return new Response(
-      JSON.stringify({
-        role: "assistant",
-        content: content,
-        id: assistantMessage.id,
-      }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    // Return the assistant's response using NextResponse
+    return NextResponse.json({
+      role: "assistant",
+      content: content,
+      id: assistantMessage.id,
+    });
+    
   } catch (error: unknown) {
     console.error('API error:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'An unknown error occurred' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'An unknown error occurred' },
+      { status: 500 }
     );
   }
 }
