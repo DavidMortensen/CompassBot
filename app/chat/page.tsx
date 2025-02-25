@@ -148,23 +148,22 @@ export default function ChatPage() {
       .then(data => {
         console.log('Poll response:', data);
         
+        // Clear interval immediately if completed to prevent any race conditions
         if (data.completed) {
-          // Polling complete
           clearInterval(pollInterval);
-          
-          if (data.error) {
-            // Handle error
-            throw new Error(data.error);
-          }
-          
-          if (data.message) {
-            // Add the assistant's message to the chat
-            setMessages(prev => [...prev, data.message]);
-          } else {
-            throw new Error('No message in completed response');
-          }
-          
+        }
+        
+        if (data.completed && data.error) {
+          // Handle error
+          throw new Error(data.error);
+        }
+        
+        if (data.completed && data.message) {
+          // Add the assistant's message to the chat
+          setMessages(prev => [...prev, data.message]);
           setIsLoading(false);
+        } else if (data.completed) {
+          throw new Error('No message in completed response');
         } else {
           // Still processing, continue polling
           console.log(`Still processing: ${data.status}`);
