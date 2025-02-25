@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 // Securely handle invite codes
 // IMPORTANT: In production, store this in an environment variable like INVITE_CODE
@@ -12,9 +11,14 @@ export async function POST(request: Request) {
     
     // Validate the invite code
     if (inviteCode === VALID_INVITE_CODE) {
+      // Create the response with the success message
+      const response = NextResponse.json({ 
+        valid: true, 
+        message: 'Invite code valid' 
+      });
+      
       // Set a secure HTTP-only cookie that expires in 7 days
-      const cookieStore = cookies();
-      cookieStore.set({
+      response.cookies.set({
         name: 'authenticated',
         value: 'true',
         httpOnly: true,
@@ -24,10 +28,7 @@ export async function POST(request: Request) {
         maxAge: 60 * 60 * 24 * 7, // 7 days
       });
 
-      return NextResponse.json({ 
-        valid: true, 
-        message: 'Invite code valid' 
-      });
+      return response;
     }
 
     // Invalid code

@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, KeyboardEvent } from 'react'
 import { Button } from "@/components/ui/button"
@@ -7,6 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { motion, AnimatePresence } from "framer-motion"
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import Image from 'next/image'
 
 // Define message types
 type Message = {
@@ -25,12 +27,9 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   
-  // Add a debug state
-  const [debug, setDebug] = useState<string[]>([]);
-
   // Log when component mounts
   useEffect(() => {
-    setDebug(prev => [...prev, 'Chat component initialized']);
+    console.log('Chat component initialized');
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -42,14 +41,13 @@ export default function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (!isLoading && input.trim()) {
-        handleSubmit(e as any);
+        submitMessage();
       }
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    
+  // Create a helper function that doesn't require an event parameter
+  const submitMessage = () => {
     if (!input.trim()) return;
     
     // Add user message to the chat
@@ -60,43 +58,51 @@ export default function ChatPage() {
     };
     
     setMessages(prev => [...prev, userMessage]);
-    setDebug(prev => [...prev, `Submitting message: ${input}`]);
+    console.log(`Submitting message: ${input}`);
     setInput('');
     setIsLoading(true);
     setError(null);
     
-    try {
-      // Call API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage],
-        }),
-      });
-      
-      setDebug(prev => [...prev, `API Response status: ${response.status}`]);
+    // Call API
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messages: [...messages, userMessage],
+      }),
+    })
+    .then(response => {
+      console.log(`API Response status: ${response.status}`);
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to get response');
+        return response.json().then(errorData => {
+          throw new Error(errorData.error || 'Failed to get response');
+        });
       }
       
-      // Parse the response
-      const assistantMessage = await response.json();
-      setDebug(prev => [...prev, `Message received: ${assistantMessage.content.substring(0, 50)}...`]);
+      return response.json();
+    })
+    .then(assistantMessage => {
+      console.log(`Message received: ${assistantMessage.content.substring(0, 50)}...`);
       
       // Add assistant message to the chat
       setMessages(prev => [...prev, assistantMessage]);
-    } catch (err) {
+    })
+    .catch(err => {
       console.error('Chat error:', err);
       setError(err instanceof Error ? err : new Error('An unknown error occurred'));
-      setDebug(prev => [...prev, `Error: ${err instanceof Error ? err.message : JSON.stringify(err)}`]);
-    } finally {
+      console.error(`Error: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+    })
+    .finally(() => {
       setIsLoading(false);
-    }
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    submitMessage();
   };
 
   // Animation variants for messages
@@ -126,7 +132,7 @@ export default function ChatPage() {
       />
     ),
     // Style code blocks
-    code: ({node, inline, className, children, ...props}: any) => {
+    code: ({inline, className, children, ...props}: any) => {
       const match = /language-(\w+)/.exec(className || '');
       return !inline && match ? (
         <div className="my-4 rounded-md overflow-hidden">
@@ -231,10 +237,12 @@ export default function ChatPage() {
                     <div className="flex items-end space-x-2">
                       {m.role === 'assistant' && (
                         <div className="w-8 h-8 rounded-full bg-white border border-blue-200 shadow-sm flex-shrink-0 flex items-center justify-center overflow-hidden">
-                          <img 
+                          <Image 
                             src={COMPASS_LOGO}
                             alt="Compass Logo" 
-                            className="w-5 h-5 object-contain"
+                            width={20}
+                            height={20}
+                            className="object-contain"
                           />
                         </div>
                       )}
@@ -281,10 +289,12 @@ export default function ChatPage() {
               >
                 <div className="flex items-end space-x-2">
                   <div className="w-8 h-8 rounded-full bg-white border border-blue-200 shadow-sm flex-shrink-0 flex items-center justify-center overflow-hidden">
-                    <img 
+                    <Image 
                       src={COMPASS_LOGO}
                       alt="Compass Logo" 
-                      className="w-5 h-5 object-contain"
+                      width={20}
+                      height={20}
+                      className="object-contain"
                     />
                   </div>
                   <div>
