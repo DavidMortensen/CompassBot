@@ -25,6 +25,8 @@ export default function LandingPage() {
     }
 
     try {
+      console.log('Submitting invite code:', inviteCode);
+      
       const response = await fetch('/api/validate-invite', {
         method: 'POST',
         headers: {
@@ -33,12 +35,21 @@ export default function LandingPage() {
         body: JSON.stringify({ inviteCode }),
       });
 
+      console.log('Response status:', response.status);
+      
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (data.valid) {
         // The cookie is set by the server, so we just need to redirect
-        router.push('/chat');
+        console.log('Invite code valid, redirecting to chat...');
+        
+        // Add a small delay before redirecting to ensure the cookie is set
+        setTimeout(() => {
+          router.push('/chat');
+        }, 500);
       } else {
+        console.log('Invalid invite code:', data.message);
         setError(data.message || 'Invalid invite code');
       }
     } catch (err) {

@@ -18,12 +18,11 @@ export async function POST(request: Request) {
       });
       
       // Set a secure HTTP-only cookie that expires in 7 days
-      response.cookies.set({
-        name: 'authenticated',
-        value: 'true',
+      // Using more compatible cookie settings for Vercel
+      response.cookies.set('authenticated', 'true', {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        sameSite: 'lax', // Changed from 'strict' to 'lax' for better compatibility
         path: '/',
         maxAge: 60 * 60 * 24 * 7, // 7 days
       });
