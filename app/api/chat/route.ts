@@ -1,66 +1,91 @@
-import OpenAI from 'openai';
-import { NextResponse } from 'next/server';
+import { AssistantResponse } from 'ai'
+import OpenAI from 'openai'
 
-// Define message type
-type ChatMessage = {
-  role: 'user' | 'assistant';
-  content: string;
-};
+// Configure maximum duration for Edge function (in seconds)
+export const maxDuration = 60
 
-// Create an OpenAI API client
+// Configure runtime as Edge
+export const runtime = 'edge'
+
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || "",
-});
+  apiKey: process.env.OPENAI_API_KEY || '',
+})
 
-// IMPORTANT! Set the runtime to edge
-export const runtime = 'edge';
+// Type for tool call function
+interface ToolCallFunction {
+  name: string;
+  arguments: string;
+}
 
-// Use the specific assistant ID from the OpenAI playground
-const ASSISTANT_ID = process.env.ASSISTANT_ID || "asst_lVJFmwqFwiSXnDM5BZbGYfEN";
+// Type for tool call
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: ToolCallFunction;
+}
 
 export async function POST(req: Request) {
-  console.log("API called: /api/chat");
-  
   try {
     // Parse the request body
-    const { messages: chatMessages } = await req.json();
-    console.log("Received messages:", JSON.stringify(chatMessages).substring(0, 100) + "...");
-    
-    // Create a thread
-    console.log("Creating thread...");
-    const thread = await openai.beta.threads.create();
-    console.log("Thread created:", thread.id);
+    const input: {
+      threadId: string | null;
+      message: string;
+    } = await req.json()
 
-    // Add only the last user message to the thread to minimize API calls
-    const lastUserMessage = (chatMessages as ChatMessage[]).filter((m) => m.role === 'user').pop();
-    if (lastUserMessage) {
-      console.log("Adding last user message to thread...");
-      await openai.beta.threads.messages.create(thread.id, {
-        role: 'user',
-        content: lastUserMessage.content,
-      });
-      console.log("Message added to thread");
-    }
+    // Create a thread if needed
+    const threadId = input.threadId ?? (await openai.beta.threads.create({})).id
 
-    // Run the assistant on the thread
-    console.log("Running assistant...");
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: ASSISTANT_ID,
-    });
-    console.log("Run created:", run.id);
+    // Add a message to the thread
+    const createdMessage = await openai.beta.threads.messages.create(threadId, {
+      role: 'user',
+      content: input.message,
+    })
 
-    // Return immediately with the IDs needed for polling
-    return NextResponse.json({
-      threadId: thread.id,
-      runId: run.id,
-      status: 'polling_required'
-    });
-    
+    return AssistantResponse(
+      { threadId, messageId: createdMessage.id },
+      async ({ forwardStream }) => {
+        // Run the assistant on the thread
+        const runStream = openai.beta.threads.runs.stream(threadId, {
+          assistant_id: process.env.ASSISTANT_ID ?? (() => {
+            throw new Error('ASSISTANT_ID is not set')
+          })(),
+        })
+
+        // Forward run status and stream message deltas
+        let runResult = await forwardStream(runStream)
+
+        // Handle any required actions (like tool calls)
+        while (
+          runResult?.status === 'requires_action' &&
+          runResult.required_action?.type === 'submit_tool_outputs'
+        ) {
+          const tool_outputs = runResult.required_action.submit_tool_outputs.tool_calls.map(
+            (toolCall: ToolCall) => {
+              // We're not using the parameters yet, but keeping them parsed for future use
+              JSON.parse(toolCall.function.arguments)
+              // Add tool handling here if needed
+              throw new Error(`Unknown tool call function: ${toolCall.function.name}`)
+            }
+          )
+
+          runResult = await forwardStream(
+            openai.beta.threads.runs.submitToolOutputsStream(threadId, runResult.id, {
+              tool_outputs,
+            })
+          )
+        }
+
+        // If run failed, throw an error
+        if (runResult?.status === 'failed') {
+          throw new Error(runResult.last_error?.message ?? 'Run failed')
+        }
+      }
+    )
   } catch (error: unknown) {
-    console.error('API error:', error);
-    return NextResponse.json(
+    console.error('API error:', error)
+    return Response.json(
       { error: error instanceof Error ? error.message : 'An unknown error occurred' },
       { status: 500 }
-    );
+    )
   }
 }
