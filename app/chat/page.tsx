@@ -80,8 +80,6 @@ export default function ChatPage() {
   });
 
   const isLoading = status === 'in_progress';
-
-  // Reference for the messages container
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change
@@ -91,13 +89,25 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages]);
 
   // Animation variants for messages
   const messageVariants = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 }
+    initial: { 
+      opacity: 0
+    },
+    animate: { 
+      opacity: 1,
+      transition: {
+        duration: 0.1
+      }
+    },
+    exit: { 
+      opacity: 0,
+      transition: {
+        duration: 0.05
+      }
+    }
   };
 
   // Handle textarea key press
@@ -112,7 +122,7 @@ export default function ChatPage() {
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!input.trim() || isLoading) return;
     
     try {
       await append({
@@ -130,19 +140,37 @@ export default function ChatPage() {
     setInput(e.target.value);
   };
 
+  // Filter out empty messages and show loading state only for the latest message
+  const displayMessages = messages.filter((message) => {
+    if (message.role === 'user') return true;
+    if (message.role === 'assistant') {
+      // Show all non-empty messages, including partial ones
+      return message.content !== '';
+    }
+    return false;
+  });
+
+  // Determine if we should show the loading indicator
+  const showLoadingIndicator = isLoading && !messages.some(m => 
+    m.role === 'assistant' && m.content !== '' && 
+    messages.indexOf(m) === messages.length - 1
+  );
+
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="min-h-screen bg-slate-100 dark:bg-slate-900 py-24 px-4"
+    >
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+        className="max-w-4xl mx-auto"
+      >
         {/* Top Bar */}
-        <div className="bg-white dark:bg-slate-800 rounded-t-xl p-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
-          <div className="w-8 h-8 relative flex-shrink-0">
-            <Image
-              src={COMPASS_LOGO}
-              alt="Compass Logo"
-              fill
-              className="object-contain"
-            />
-          </div>
+        <div className="bg-white dark:bg-slate-800 rounded-t-xl p-4 border-b border-slate-200 dark:border-slate-700">
           <div>
             <h1 className="font-semibold text-lg">Compass Assistant</h1>
             <p className="text-sm text-muted-foreground">Powered by OpenAI</p>
@@ -153,19 +181,71 @@ export default function ChatPage() {
         <div className="bg-white dark:bg-slate-800 h-[600px] flex flex-col rounded-b-xl">
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-            <AnimatePresence>
-              {messages.map((message: Message) => (
+            <div className="flex flex-col">
+              {displayMessages.map((message: Message) => (
+                <div key={`message-${message.id}`}>
+                  {message.role === 'user' ? (
+                    <div
+                      className="flex mb-4 justify-end"
+                    >
+                      <div className="flex gap-3 max-w-[85%] flex-row-reverse items-end">
+                        <div className="rounded-2xl px-4 py-2 shadow-sm bg-indigo-600 text-white">
+                          <div className="text-sm text-white">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={MarkdownComponents}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <AnimatePresence initial={false}>
+                      <motion.div
+                        key={message.id}
+                        variants={messageVariants}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        className="flex mb-4 justify-start"
+                      >
+                        <div className="flex gap-3 max-w-[85%] items-start">
+                          <div className="w-8 h-8 relative flex-shrink-0 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-700">
+                            <Image
+                              src={COMPASS_LOGO}
+                              alt="Compass Logo"
+                              fill
+                              className="object-contain p-1"
+                            />
+                          </div>
+                          <div className="rounded-2xl px-4 py-2 shadow-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                            <div className="prose dark:prose-invert prose-sm max-w-none">
+                              <ReactMarkdown
+                                remarkPlugins={[remarkGfm]}
+                                components={MarkdownComponents}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>
+                  )}
+                </div>
+              ))}
+              {showLoadingIndicator && (
                 <motion.div
-                  key={message.id}
+                  key="loading"
                   variants={messageVariants}
                   initial="initial"
                   animate="animate"
                   exit="exit"
-                  className={`flex gap-3 ${
-                    message.role === 'assistant' ? 'items-start' : 'items-end flex-row-reverse'
-                  }`}
+                  className="flex mb-4 justify-start"
                 >
-                  {message.role === 'assistant' && (
+                  <div className="flex gap-3 max-w-[85%] items-start">
                     <div className="w-8 h-8 relative flex-shrink-0 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-700">
                       <Image
                         src={COMPASS_LOGO}
@@ -174,67 +254,35 @@ export default function ChatPage() {
                         className="object-contain p-1"
                       />
                     </div>
-                  )}
-                  <div
-                    className={`rounded-2xl px-4 py-2 max-w-[85%] shadow-sm ${
-                      message.role === 'assistant'
-                        ? 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
-                        : 'bg-indigo-600 text-white'
-                    }`}
-                  >
-                    <div className={message.role === 'assistant' ? 'prose dark:prose-invert prose-sm max-w-none' : 'text-sm text-white'}>
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={MarkdownComponents}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
+                    <div className="rounded-2xl px-4 py-2 shadow-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                      <div className="flex items-center gap-1 py-1">
+                        <span className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce"></span>
+                        <span className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce [animation-delay:0.2s]"></span>
+                        <span className="w-2 h-2 bg-slate-400 dark:bg-slate-500 rounded-full animate-bounce [animation-delay:0.4s]"></span>
+                      </div>
                     </div>
                   </div>
                 </motion.div>
-              ))}
-            </AnimatePresence>
-            
-            {isLoading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex gap-3 items-center text-muted-foreground"
-              >
-                <div className="w-8 h-8 relative flex-shrink-0 rounded-full overflow-hidden border-2 border-slate-200 dark:border-slate-700">
-                  <Image
-                    src={COMPASS_LOGO}
-                    alt="Compass Logo"
-                    fill
-                    className="object-contain p-1 opacity-50"
-                  />
-                </div>
-                <div className="flex gap-1 bg-white dark:bg-slate-800 rounded-2xl px-4 py-2 shadow-sm border border-slate-200 dark:border-slate-700">
-                  <span className="animate-bounce">●</span>
-                  <span className="animate-bounce [animation-delay:0.2s]">●</span>
-                  <span className="animate-bounce [animation-delay:0.4s]">●</span>
-                </div>
-              </motion.div>
-            )}
-            
-            {/* Invisible div for scrolling */}
+              )}
+            </div>
             <div ref={messagesEndRef} />
           </div>
 
           {/* Input Area */}
           <div className="border-t border-slate-200 dark:border-slate-700 p-4 bg-slate-50 dark:bg-slate-900 rounded-b-xl">
-            <form onSubmit={handleSubmit} className="flex gap-2">
+            <form onSubmit={handleSubmit} className="flex gap-2 items-stretch">
               <Textarea
                 value={input}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyPress}
                 placeholder="Type your message..."
-                className="min-h-[52px] max-h-[200px] flex-1 resize-none bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                disabled={isLoading}
+                className="min-h-[56px] max-h-[200px] flex-1 resize-none bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 disabled:opacity-50"
               />
               <Button 
                 type="submit" 
                 disabled={isLoading || !input.trim()}
-                className="h-[52px] px-6 bg-indigo-600 hover:bg-indigo-700 text-white"
+                className="min-h-[56px] px-8 bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-50 flex items-center justify-center"
               >
                 {isLoading ? (
                   <span className="flex gap-1">
@@ -254,7 +302,7 @@ export default function ChatPage() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 } 
