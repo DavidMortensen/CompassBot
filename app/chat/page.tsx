@@ -8,7 +8,7 @@ import ReactMarkdown, { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Image from 'next/image'
 import type { ReactNode } from 'react'
-import { useAssistant, type Message } from 'ai/react'
+import { useAssistant } from 'ai/react'
 
 // Define types for markdown components
 type MarkdownProps = {
@@ -81,6 +81,8 @@ export default function ChatPage() {
 
   const isLoading = status === 'in_progress';
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasInitialMessageRef = useRef(false);
+  const hasAttemptedInitialMessage = useRef(false);
 
   // Scroll to bottom when messages change
   const scrollToBottom = () => {
@@ -90,6 +92,30 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Send initial message
+  useEffect(() => {
+    const sendInitialMessage = async () => {
+      if (!hasInitialMessageRef.current && !hasAttemptedInitialMessage.current && messages.length === 0) {
+        try {
+          hasAttemptedInitialMessage.current = true;
+          // Wait for view animation (0.4s) plus additional delay
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          // Use append to properly handle the message stream
+          await append({
+            content: "Hi, introduce yourself as the Compass Assistant.",
+            role: 'user',
+          });
+          hasInitialMessageRef.current = true;
+        } catch (error) {
+          console.error('Error sending initial message:', error);
+          hasAttemptedInitialMessage.current = false;
+        }
+      }
+    };
+
+    sendInitialMessage();
+  }, [append, messages.length]);
 
   // Animation variants for messages
   const messageVariants = {
@@ -142,7 +168,13 @@ export default function ChatPage() {
 
   // Filter out empty messages and show loading state only for the latest message
   const displayMessages = messages.filter((message) => {
-    if (message.role === 'user') return true;
+    if (message.role === 'user') {
+      // Hide the initial prompt message
+      if (message.content === "Hi, introduce yourself as the Compass Assistant.") {
+        return false;
+      }
+      return true;
+    }
     if (message.role === 'assistant') {
       // Show all non-empty messages, including partial ones
       return message.content !== '';
@@ -182,7 +214,7 @@ export default function ChatPage() {
           {/* Messages Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
             <div className="flex flex-col">
-              {displayMessages.map((message: Message) => (
+              {displayMessages.map((message) => (
                 <div key={`message-${message.id}`}>
                   {message.role === 'user' ? (
                     <div
